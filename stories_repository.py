@@ -35,7 +35,9 @@ def get_published_stories_by_collection(client, collection_id: str) -> List[Stor
     try:
         response = (
             client.table("stories")
-            .select("id,title,body,image_url,audio_url,duration_seconds,sort_order")
+            .select(
+                "id,title,body,image_url,audio_url,duration_seconds,sort_order,collection_id"
+            )
             .eq("is_published", True)
             .eq("collection_id", collection_id)
             .order("sort_order")
@@ -54,7 +56,9 @@ def get_random_published_story(client, collection_id: Optional[str] = None) -> O
     try:
         query = (
             client.table("stories")
-            .select("id,title,body,image_url,audio_url,duration_seconds,sort_order")
+            .select(
+                "id,title,body,image_url,audio_url,duration_seconds,sort_order,collection_id"
+            )
             .eq("is_published", True)
         )
 
@@ -70,6 +74,26 @@ def get_random_published_story(client, collection_id: Optional[str] = None) -> O
     except Exception as exc:  # pragma: no cover
         print(f"[Supabase] Erro ao sortear história publicada: {exc}")
         return None
+
+
+def get_all_published_stories(client) -> List[Story]:
+    """Retorna todas as histórias publicadas, usadas para o sorteio geral no modo leitor."""
+
+    try:
+        response = (
+            client.table("stories")
+            .select(
+                "id,title,body,image_url,audio_url,duration_seconds,sort_order,collection_id"
+            )
+            .eq("is_published", True)
+            .order("sort_order")
+            .order("title")
+            .execute()
+        )
+        return response.data or []
+    except Exception as exc:  # pragma: no cover
+        print(f"[Supabase] Erro ao listar histórias publicadas: {exc}")
+        return []
 
 
 # Funções administrativas (CRUD básico)

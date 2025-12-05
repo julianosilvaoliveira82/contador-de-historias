@@ -57,6 +57,17 @@ Dicas:
 - Se nada aparecer, confira se a coleção está com `is_active = true`, se as histórias estão com `is_published = true` e se os secrets estão configurados corretamente no Streamlit Cloud.
 - O app exibe o título, o texto da história, a imagem (quando `image_url` estiver preenchido) e o player de áudio (quando `audio_url` está configurado).
 
+### Modo leitura: História da noite e escolha de histórias
+- Botão **História da noite**: sorteia uma história publicada. Se uma coleção estiver escolhida, o sorteio considera apenas essa coleção; caso contrário, sorteia entre todas as histórias publicadas.
+- Interface de seleção: coleções e histórias aparecem como botões/cards grandes para facilitar o uso em tablet ou notebook.
+- Memória da sessão: o app lembra a coleção e a história escolhidas enquanto a página estiver aberta (usa `st.session_state`).
+- Se não houver histórias publicadas, o leitor exibe uma mensagem amigável orientando a cadastrar no painel admin.
+
+Passo a passo para os pais:
+1. No painel admin (`?mode=admin`), crie coleções e histórias e marque `is_published = true` nas histórias que deseja mostrar.
+2. No modo leitor (`/` ou `?mode=reader`), escolha a coleção junto com o Benício ou use o botão **História da noite** para uma surpresa.
+3. A história será exibida com título, texto, imagem (se houver) e player de áudio (se houver).
+
 ## Usando o painel admin (CRUD de coleções e histórias)
 O painel admin permite criar e editar coleções e histórias diretamente nas tabelas `collections` e `stories` do Supabase.
 

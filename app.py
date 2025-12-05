@@ -1,10 +1,12 @@
-import streamlit as st
+import random
 from pathlib import Path
+
+import streamlit as st
 
 from stories_repository import (
     get_active_collections,
+    get_all_published_stories,
     get_published_stories_by_collection,
-    get_random_published_story,
     list_collections_for_admin,
     create_collection,
     update_collection,
@@ -169,6 +171,10 @@ def render_reader_mode() -> None:
     if not reader_pin_gate():
         return
 
+    st.session_state.setdefault("current_collection_id", None)
+    st.session_state.setdefault("current_story_id", None)
+    st.session_state.setdefault("last_random_story_id", None)
+
     client = get_supabase_client()
 
     if client is None:
@@ -185,53 +191,113 @@ def render_reader_mode() -> None:
         st.info("Nenhuma coleção disponível ainda. Cadastre novas coleções no Supabase.")
         return
 
-    collection_names = [collection.get("name", "Coleção") for collection in collections]
-    default_index = 0
-    selected_collection_index = st.selectbox(
-        "Escolha uma coleção",
-        range(len(collections)),
-        format_func=lambda idx: collection_names[idx],
-        index=default_index,
+    selected_collection = next(
+        (c for c in collections if c.get("id") == st.session_state.get("current_collection_id")),
+        None,
     )
-    selected_collection = collections[selected_collection_index]
 
-    if selected_collection.get("description"):
-        st.caption(selected_collection["description"])
+    st.markdown("### Escolha uma coleção")
+    cols_per_row = min(3, len(collections)) or 1
+    for start in range(0, len(collections), cols_per_row):
+        row = st.columns(cols_per_row)
+        for col, collection in zip(row, collections[start : start + cols_per_row]):
+            with col:
+                st.markdown(f"#### {collection.get('name', 'Coleção')}")
+                if collection.get("description"):
+                    st.caption(collection.get("description"))
 
-    st.markdown("---")
+                is_selected = selected_collection and collection.get("id") == selected_collection.get("id")
+                button_label = "Coleção selecionada" if is_selected else "Ler esta coleção"
+                if st.button(button_label, key=f"collection_btn_{collection.get('id')}"):
+                    st.session_state["current_collection_id"] = collection.get("id")
+                    st.session_state["current_story_id"] = None
+                    st.session_state["last_random_story_id"] = None
+                    selected_collection = collection
+                    st.rerun()
 
-    random_story = None
-    if st.button("História aleatória"):
-        random_story = get_random_published_story(client, selected_collection.get("id"))
-        if random_story is None:
-            st.info("Não encontramos uma história publicada para sortear nesta coleção.")
+    if selected_collection:
+        st.success(f"Coleção escolhida: {selected_collection.get('name')}")
+    else:
+        st.info("Escolha uma coleção acima ou use o botão de sorteio.")
 
-    stories = get_published_stories_by_collection(client, selected_collection.get("id"))
-
-    if not stories:
-        st.info(
-            "Nenhuma história publicada nesta coleção ainda. Cadastre novas histórias no Supabase."
+    stories_in_collection = []
+    if selected_collection:
+        stories_in_collection = get_published_stories_by_collection(
+            client, selected_collection.get("id")
         )
-        return
+        for story in stories_in_collection:
+            story.setdefault("collection_id", selected_collection.get("id"))
 
-    story_titles = [story.get("title", "História") for story in stories]
-    selected_story_index = st.selectbox(
-        "Escolha uma história",
-        range(len(stories)),
-        format_func=lambda idx: story_titles[idx],
-    )
-    selected_story = stories[selected_story_index]
+    story_to_display = None
 
     st.markdown("---")
+    st.markdown("### História da noite")
+    if st.button("História da noite"):
+        if selected_collection:
+            candidate_stories = stories_in_collection
+        else:
+            candidate_stories = get_all_published_stories(client)
 
-    if random_story:
-        st.subheader("História aleatória")
-        render_story_content(random_story)
-        st.markdown("---")
+        if not candidate_stories:
+            st.info(
+                "Ainda não há histórias publicadas para sortear. Cadastre e publique histórias no painel admin."
+            )
+        else:
+            last_id = st.session_state.get("last_random_story_id")
+            pool = [s for s in candidate_stories if s.get("id") != last_id] or candidate_stories
+            chosen_story = random.choice(pool)
+            st.session_state["last_random_story_id"] = chosen_story.get("id")
+            st.session_state["current_story_id"] = chosen_story.get("id")
+            chosen_collection_id = chosen_story.get("collection_id")
+            if chosen_collection_id:
+                st.session_state["current_collection_id"] = chosen_collection_id
+                selected_collection = next(
+                    (c for c in collections if c.get("id") == chosen_collection_id), selected_collection
+                )
+            story_to_display = chosen_story
+            st.success("História sorteada! Aproveitem a leitura.")
 
-    render_story_content(selected_story)
+    st.markdown("---")
+    st.markdown("### Escolher história manualmente")
+    if not selected_collection:
+        st.info("Selecione uma coleção acima para navegar pelas histórias ou use o sorteio.")
+    else:
+        if not stories_in_collection:
+            st.info("Nenhuma história publicada nesta coleção ainda. Cadastre novas histórias no painel admin.")
+        else:
+            st.caption(
+                "Toque em uma das histórias abaixo ou use o botão de sorteio para descobrir a história da noite."
+            )
+            cols_per_row = 2
+            for start in range(0, len(stories_in_collection), cols_per_row):
+                row = st.columns(cols_per_row)
+                for col, story in zip(row, stories_in_collection[start : start + cols_per_row]):
+                    with col:
+                        st.markdown(f"**{story.get('title', 'História')}**")
+                        if st.button("Ler esta história", key=f"story_btn_{story.get('id')}"):
+                            st.session_state["current_story_id"] = story.get("id")
+                            st.session_state["last_random_story_id"] = None
+                            story_to_display = story
+            if story_to_display is None and st.session_state.get("current_story_id"):
+                story_to_display = next(
+                    (s for s in stories_in_collection if s.get("id") == st.session_state.get("current_story_id")),
+                    None,
+                )
 
-    # TODO: Incluir player de áudio completo para cada história.
+    if story_to_display is None and st.session_state.get("current_story_id"):
+        all_published = get_all_published_stories(client)
+        story_to_display = next(
+            (s for s in all_published if s.get("id") == st.session_state.get("current_story_id")),
+            None,
+        )
+        if story_to_display and story_to_display.get("collection_id"):
+            st.session_state.setdefault("current_collection_id", story_to_display.get("collection_id"))
+
+    st.markdown("---")
+    if story_to_display:
+        render_story_content(story_to_display)
+    else:
+        st.info("Escolha ou sorteie uma história para começar a leitura.")
 
 
 def render_collections_admin(client) -> None:
