@@ -1,0 +1,20 @@
+# Ambientes virtuais
+venv/
+.venv/
+env/
+
+# Cache e artefatos de Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+
+# Configurações e IDEs locais
+.DS_Store
+.idea/
+.vscode/
+.python-version
+
+# Variáveis de ambiente e segredos
+.env
+.streamlit/secrets.toml
