@@ -53,7 +53,7 @@ def render_admin_mode() -> None:
 
 def main() -> None:
     """Função principal que organiza os modos do app."""
-    st.set_page_config(title="Contador de Histórias", page_icon=None, layout="wide")
+    st.set_page_config(page_title="Contador de Histórias", page_icon=None, layout="wide")
 
     mode = get_mode_from_query_params()
 
