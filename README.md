@@ -35,6 +35,17 @@ O Supabase será usado para armazenar coleções e histórias, incluindo textos,
 
 > Próximos passos: a integração do app Streamlit com o Supabase (leitura de coleções/histórias, upload de mídia e autenticação) será feita em etapa futura.
 
+## Secrets e Supabase no Streamlit Cloud
+Para que o painel admin confirme a conexão com o Supabase, configure os secrets no Streamlit Cloud:
+
+1. Acesse o painel do app no Streamlit Cloud.
+2. Vá em **Settings → Secrets**.
+3. Defina as chaves `SUPABASE_URL` e `SUPABASE_ANON_KEY` com os valores do seu projeto Supabase.
+4. Salve e redeploye o app.
+
+- O código lê esses valores via `st.secrets`; eles **não** devem ser colocados diretamente no código ou no README.
+- Após configurar, o modo admin exibirá a mensagem “Conexão com Supabase OK”. Caso não estejam configurados, será mostrado um aviso para adicionar os secrets.
+
 ## Próximos Passos (TODO)
 - Adicionar PIN para proteger a saída do modo leitor.
 - Integrar Supabase para coleções de histórias, storage de imagens e áudio, e autenticação.

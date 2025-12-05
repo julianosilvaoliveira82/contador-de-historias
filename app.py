@@ -1,5 +1,7 @@
 import streamlit as st
 
+from supabase_client import get_supabase_client
+
 
 def get_mode_from_query_params() -> str:
     """Lê o parâmetro de querystring e define o modo atual."""
@@ -47,13 +49,22 @@ def render_admin_mode() -> None:
         """
     )
 
+    supabase_client = get_supabase_client()
+    if supabase_client is None:
+        st.warning(
+            "Supabase não configurado. Defina SUPABASE_URL e SUPABASE_ANON_KEY"
+            " em Settings → Secrets no Streamlit Cloud."
+        )
+    else:
+        st.success("Conexão com Supabase OK")
+
     # TODO: Implementar CRUD completo das histórias no painel admin.
     # TODO: Conectar com Supabase para gerenciar dados e arquivos.
 
 
 def main() -> None:
     """Função principal que organiza os modos do app."""
-    st.set_page_config(title="Contador de Histórias", page_icon=None, layout="wide")
+    st.set_page_config(page_title="Contador de Histórias", page_icon=None, layout="wide")
 
     mode = get_mode_from_query_params()
 
