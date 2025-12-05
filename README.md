@@ -22,6 +22,19 @@ URLs de exemplo:
 3. Confirmar a instalação automática via `requirements.txt`.
 4. Quando houver integrações (ex.: Supabase), adicionar secrets em `.streamlit/secrets.toml` diretamente na interface do Streamlit Cloud.
 
+## Configuração do Supabase
+O Supabase será usado para armazenar coleções e histórias, incluindo textos, imagens e áudios. Siga os passos para criar o schema inicial:
+
+1. Acesse o painel do Supabase do seu projeto.
+2. Abra o **SQL Editor**.
+3. Copie o conteúdo de `supabase/schema.sql` deste repositório.
+4. Execute o script para criar as tabelas e índices.
+5. Verifique no menu **Table Editor** se as tabelas `collections` e `stories` foram criadas corretamente.
+
+> Segurança: nunca coloque `<SUPABASE_URL>`, `<SUPABASE_ANON_KEY>` ou senhas diretamente no código ou neste README. Quando a integração com Supabase for implementada, use apenas secrets/variáveis de ambiente.
+
+> Próximos passos: a integração do app Streamlit com o Supabase (leitura de coleções/histórias, upload de mídia e autenticação) será feita em etapa futura.
+
 ## Próximos Passos (TODO)
 - Adicionar PIN para proteger a saída do modo leitor.
 - Integrar Supabase para coleções de histórias, storage de imagens e áudio, e autenticação.
