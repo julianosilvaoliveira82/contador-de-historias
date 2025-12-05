@@ -115,24 +115,22 @@ def list_collections_for_admin(client) -> List[Collection]:
         return []
 
 
-def create_collection(client, data: Dict[str, Any]) -> Optional[Collection]:
-    """Cria uma nova coleção com valores fornecidos."""
-
-    payload = {
-        "name": data.get("name"),
-        "description": data.get("description"),
-        "sort_order": data.get("sort_order", 0),
-        "is_active": data.get("is_active", True),
-    }
-
+def create_collection(client, name: str, description: str, sort_order: int, is_active: bool):
     try:
-        response = client.table("collections").insert(payload).execute()
+        data = {
+            "name": name,
+            "description": description or "",
+            "sort_order": sort_order,   # <- usar sort_order, não "order"
+            "is_active": is_active,
+        }
+        response = client.table("collections").insert(data).execute()
         if response.data:
             return response.data[0]
         return None
-    except Exception as exc:  # pragma: no cover
-        print(f"[Supabase] Erro ao criar coleção: {exc}")
+    except Exception as e:
+        print("Erro ao criar coleção:", e)
         return None
+
 
 
 def update_collection(client, collection_id: str, data: Dict[str, Any]) -> Optional[Collection]:
