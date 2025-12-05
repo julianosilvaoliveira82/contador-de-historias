@@ -52,3 +52,16 @@ CREATE TRIGGER trg_stories_updated_at
 BEFORE UPDATE ON stories
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
+
+-- Histórico de leitura: registra qual história foi aberta, de qual coleção e a origem
+CREATE TABLE IF NOT EXISTS public.reading_log (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    story_id uuid REFERENCES public.stories(id) ON DELETE SET NULL,
+    collection_id uuid REFERENCES public.collections(id) ON DELETE SET NULL,
+    source text NOT NULL, -- 'random' (História da noite) ou 'manual' (escolha direta)
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- Índices para consultas recentes e ranking
+CREATE INDEX IF NOT EXISTS idx_reading_log_created_at ON public.reading_log (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_reading_log_story_id ON public.reading_log (story_id);

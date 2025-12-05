@@ -115,18 +115,14 @@ def list_collections_for_admin(client) -> List[Collection]:
         return []
 
 
-from typing import Optional, Dict, Any
-
-Collection = Dict[str, Any]  # se esse alias já existir, não duplique
-
 def create_collection(client, data: Dict[str, Any]) -> Optional[Collection]:
-    """Cria uma nova coleção no Supabase."""
+    """Cria uma nova coleção com valores fornecidos."""
 
     payload = {
-        "name": (data.get("name") or "").strip(),
-        "description": (data.get("description") or "").strip(),
-        "sort_order": int(data.get("sort_order") or 0),
-        "is_active": bool(data.get("is_active", True)),
+        "name": data.get("name"),
+        "description": data.get("description"),
+        "sort_order": data.get("sort_order", 0),
+        "is_active": data.get("is_active", True),
     }
 
     try:
@@ -137,8 +133,6 @@ def create_collection(client, data: Dict[str, Any]) -> Optional[Collection]:
     except Exception as exc:  # pragma: no cover
         print(f"[Supabase] Erro ao criar coleção: {exc}")
         return None
-
-
 
 
 def update_collection(client, collection_id: str, data: Dict[str, Any]) -> Optional[Collection]:
@@ -169,7 +163,7 @@ def list_stories_for_collection_admin(client, collection_id: str) -> List[Story]
             client.table("stories")
             .select(
                 "id,title,body,image_url,audio_url,is_published,sort_order,"
-                "duration_seconds,created_at,updated_at"
+                "duration_seconds,created_at,updated_at,collection_id"
             )
             .eq("collection_id", collection_id)
             .order("sort_order")
@@ -254,3 +248,144 @@ def update_story_media(
     except Exception as exc:  # pragma: no cover
         print(f"[Supabase] Erro ao atualizar mídia da história: {exc}")
         return None
+
+
+def delete_story(client, story_id: str) -> bool:
+    """Exclui uma história pelo id. Retorna True em sucesso."""
+
+    try:
+        client.table("stories").delete().eq("id", story_id).execute()
+        return True
+    except Exception as exc:  # pragma: no cover
+        print(f"[Supabase] Erro ao excluir história: {exc}")
+        return False
+
+
+def log_story_read(client, story_id: str, collection_id: Optional[str], source: str) -> bool:
+    """Registra uma leitura no histórico, sem interromper a UI em caso de falha."""
+
+    normalized_source = source if source in {"random", "manual"} else "manual"
+    payload = {
+        "story_id": story_id,
+        "collection_id": collection_id,
+        "source": normalized_source,
+    }
+
+    try:
+        client.table("reading_log").insert(payload).execute()
+        return True
+    except Exception as exc:  # pragma: no cover
+        print(f"[Supabase] Erro ao registrar leitura: {exc}")
+        return False
+
+
+def get_recent_reads(client, limit: int = 20) -> List[Dict[str, Any]]:
+    """Busca leituras recentes, tentando trazer título e coleção quando disponíveis."""
+
+    try:
+        response = (
+            client.table("reading_log")
+            .select("story_id,collection_id,source,created_at,stories(title),collections(name)")
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        rows = response.data or []
+
+        story_titles: Dict[str, str] = {}
+        collection_names: Dict[str, str] = {}
+
+        # Preenche mapas com dados aninhados (quando suportado)
+        for row in rows:
+            story_data = row.get("stories") or {}
+            collection_data = row.get("collections") or {}
+            if row.get("story_id") and story_data.get("title"):
+                story_titles[row["story_id"]] = story_data.get("title")
+            if row.get("collection_id") and collection_data.get("name"):
+                collection_names[row["collection_id"]] = collection_data.get("name")
+
+        # Busca títulos faltantes, caso a seleção aninhada não esteja habilitada
+        missing_story_ids = {
+            row.get("story_id")
+            for row in rows
+            if row.get("story_id") and row.get("story_id") not in story_titles
+        }
+        if missing_story_ids:
+            stories_response = (
+                client.table("stories")
+                .select("id,title")
+                .in_("id", list(missing_story_ids))
+                .execute()
+            )
+            for story in stories_response.data or []:
+                story_titles[story.get("id")] = story.get("title")
+
+        missing_collection_ids = {
+            row.get("collection_id")
+            for row in rows
+            if row.get("collection_id") and row.get("collection_id") not in collection_names
+        }
+        if missing_collection_ids:
+            collections_response = (
+                client.table("collections")
+                .select("id,name")
+                .in_("id", list(missing_collection_ids))
+                .execute()
+            )
+            for col in collections_response.data or []:
+                collection_names[col.get("id")] = col.get("name")
+
+        formatted_rows: List[Dict[str, Any]] = []
+        for row in rows:
+            formatted_rows.append(
+                {
+                    "title": story_titles.get(row.get("story_id"), "—"),
+                    "collection_name": collection_names.get(row.get("collection_id"), "—"),
+                    "source": row.get("source"),
+                    "created_at": row.get("created_at"),
+                }
+            )
+
+        return formatted_rows
+    except Exception as exc:  # pragma: no cover
+        print(f"[Supabase] Erro ao buscar histórico de leituras: {exc}")
+        return []
+
+
+def get_read_count_by_story(client) -> List[Dict[str, Any]]:
+    """Retorna um ranking simples das histórias mais lidas."""
+
+    try:
+        response = client.table("reading_log").select("story_id").execute()
+        rows = response.data or []
+        counts: Dict[str, int] = {}
+        for row in rows:
+            story_id = row.get("story_id")
+            if story_id:
+                counts[story_id] = counts.get(story_id, 0) + 1
+
+        if not counts:
+            return []
+
+        story_ids = list(counts.keys())
+        titles: Dict[str, str] = {}
+        stories_response = (
+            client.table("stories").select("id,title").in_("id", story_ids).execute()
+        )
+        for story in stories_response.data or []:
+            titles[story.get("id")] = story.get("title")
+
+        ranking = [
+            {
+                "story_id": story_id,
+                "title": titles.get(story_id, "História"),
+                "read_count": count,
+            }
+            for story_id, count in counts.items()
+        ]
+
+        ranking.sort(key=lambda item: item.get("read_count", 0), reverse=True)
+        return ranking
+    except Exception as exc:  # pragma: no cover
+        print(f"[Supabase] Erro ao montar ranking de leituras: {exc}")
+        return []

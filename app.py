@@ -14,6 +14,10 @@ from stories_repository import (
     create_story,
     update_story,
     update_story_media,
+    delete_story,
+    log_story_read,
+    get_recent_reads,
+    get_read_count_by_story,
 )
 from supabase_client import get_supabase_client
 
@@ -113,7 +117,8 @@ def admin_login_gate() -> bool:
     if st.button("Entrar"):
         if input_user == str(username) and input_password == str(password):
             st.session_state["admin_authenticated"] = True
-            st.rerun()
+            st.success("Login realizado com sucesso.")
+            return True
         else:
             st.error("Credenciais inválidas. Tente novamente.")
 
@@ -174,6 +179,7 @@ def render_reader_mode() -> None:
     st.session_state.setdefault("current_collection_id", None)
     st.session_state.setdefault("current_story_id", None)
     st.session_state.setdefault("last_random_story_id", None)
+    st.session_state.setdefault("reader_focus_mode", False)
 
     client = get_supabase_client()
 
@@ -184,6 +190,32 @@ def render_reader_mode() -> None:
             "→ Secrets no Streamlit Cloud."
         )
         return
+
+    def fetch_story_by_id(story_id: str):
+        try:
+            all_published = get_all_published_stories(client)
+            return next((s for s in all_published if s.get("id") == story_id), None)
+        except Exception as exc:  # pragma: no cover - log simples
+            print(f"[Supabase] Erro ao buscar história por id: {exc}")
+            return None
+
+    # Modo focado: mostra apenas a história escolhida e um botão de voltar
+    if st.session_state.get("reader_focus_mode") and st.session_state.get("current_story_id"):
+        story = fetch_story_by_id(st.session_state.get("current_story_id"))
+        if st.button("Voltar para lista"):
+            st.session_state["reader_focus_mode"] = False
+            st.rerun()
+            return
+
+        if story:
+            render_story_content(story)
+            return
+
+        st.info(
+            "Não encontramos esta história agora. Voltamos para a lista para você tentar novamente."
+        )
+        st.session_state["reader_focus_mode"] = False
+        st.session_state["current_story_id"] = None
 
     collections = get_active_collections(client)
 
@@ -208,10 +240,11 @@ def render_reader_mode() -> None:
 
                 is_selected = selected_collection and collection.get("id") == selected_collection.get("id")
                 button_label = "Coleção selecionada" if is_selected else "Ler esta coleção"
-                if st.button(button_label, key=f"collection_btn_{collection.get('id')}"):
+                if st.button(button_label, key=f"collection_btn_{collection.get('id')}", use_container_width=True):
                     st.session_state["current_collection_id"] = collection.get("id")
                     st.session_state["current_story_id"] = None
                     st.session_state["last_random_story_id"] = None
+                    st.session_state["reader_focus_mode"] = False
                     selected_collection = collection
                     st.rerun()
 
@@ -228,15 +261,12 @@ def render_reader_mode() -> None:
         for story in stories_in_collection:
             story.setdefault("collection_id", selected_collection.get("id"))
 
-    story_to_display = None
-
     st.markdown("---")
     st.markdown("### História da noite")
-    if st.button("História da noite"):
-        if selected_collection:
-            candidate_stories = stories_in_collection
-        else:
-            candidate_stories = get_all_published_stories(client)
+    if st.button("História da noite", use_container_width=True):
+        candidate_stories = (
+            stories_in_collection if selected_collection else get_all_published_stories(client)
+        )
 
         if not candidate_stories:
             st.info(
@@ -251,11 +281,11 @@ def render_reader_mode() -> None:
             chosen_collection_id = chosen_story.get("collection_id")
             if chosen_collection_id:
                 st.session_state["current_collection_id"] = chosen_collection_id
-                selected_collection = next(
-                    (c for c in collections if c.get("id") == chosen_collection_id), selected_collection
-                )
-            story_to_display = chosen_story
+
+            st.session_state["reader_focus_mode"] = True
+            log_story_read(client, chosen_story.get("id"), chosen_collection_id, source="random")
             st.success("História sorteada! Aproveitem a leitura.")
+            st.rerun()
 
     st.markdown("---")
     st.markdown("### Escolher história manualmente")
@@ -274,28 +304,26 @@ def render_reader_mode() -> None:
                 for col, story in zip(row, stories_in_collection[start : start + cols_per_row]):
                     with col:
                         st.markdown(f"**{story.get('title', 'História')}**")
-                        if st.button("Ler esta história", key=f"story_btn_{story.get('id')}"):
+                        if st.button("Ler esta história", key=f"story_btn_{story.get('id')}", use_container_width=True):
                             st.session_state["current_story_id"] = story.get("id")
                             st.session_state["last_random_story_id"] = None
-                            story_to_display = story
-            if story_to_display is None and st.session_state.get("current_story_id"):
-                story_to_display = next(
-                    (s for s in stories_in_collection if s.get("id") == st.session_state.get("current_story_id")),
-                    None,
-                )
+                            st.session_state["reader_focus_mode"] = True
+                            log_story_read(
+                                client,
+                                story.get("id"),
+                                st.session_state.get("current_collection_id"),
+                                source="manual",
+                            )
+                            st.rerun()
 
-    if story_to_display is None and st.session_state.get("current_story_id"):
-        all_published = get_all_published_stories(client)
-        story_to_display = next(
-            (s for s in all_published if s.get("id") == st.session_state.get("current_story_id")),
-            None,
-        )
-        if story_to_display and story_to_display.get("collection_id"):
-            st.session_state.setdefault("current_collection_id", story_to_display.get("collection_id"))
-
-    st.markdown("---")
-    if story_to_display:
-        render_story_content(story_to_display)
+    # Caso o usuário já tenha uma história selecionada, exibe o conteúdo padrão
+    if st.session_state.get("current_story_id"):
+        story_to_display = fetch_story_by_id(st.session_state.get("current_story_id"))
+        if story_to_display:
+            st.markdown("---")
+            render_story_content(story_to_display)
+        else:
+            st.info("Escolha ou sorteie uma história para começar a leitura.")
     else:
         st.info("Escolha ou sorteie uma história para começar a leitura.")
 
@@ -526,6 +554,12 @@ def render_stories_admin(client, collections) -> None:
         )
         selected_story = stories[story_index]
 
+        collection_options = {c.get("name", "Coleção"): c.get("id") for c in collections}
+        current_collection_id = selected_story.get("collection_id") or collection_id
+        edit_collection_name = next(
+            (name for name, cid in collection_options.items() if cid == current_collection_id), None
+        )
+
         edit_title = st.text_input(
             "Título",
             value=selected_story.get("title", ""),
@@ -535,6 +569,14 @@ def render_stories_admin(client, collections) -> None:
             "Texto",
             value=selected_story.get("body", "") or "",
             key="edit_story_body",
+        )
+        edit_collection = st.selectbox(
+            "Coleção desta história",
+            list(collection_options.keys()),
+            index=list(collection_options.keys()).index(edit_collection_name)
+            if edit_collection_name in collection_options
+            else 0,
+            key="edit_story_collection",
         )
         edit_image_url = st.text_input(
             "URL da imagem (opcional)",
@@ -571,6 +613,11 @@ def render_stories_admin(client, collections) -> None:
         )
 
         save_story = st.form_submit_button("Salvar alterações")
+        delete_confirm = st.checkbox(
+            "Quero excluir esta história (ação permanente)", key="delete_story_confirm"
+        )
+        delete_story_btn = st.form_submit_button("Excluir história")
+
         if save_story:
             if not edit_title.strip() or not edit_body.strip():
                 st.error("Informe título e texto para atualizar a história.")
@@ -585,6 +632,7 @@ def render_stories_admin(client, collections) -> None:
                         "audio_url": edit_audio_url.strip() if edit_audio_url else None,
                         "sort_order": int(edit_sort_order),
                         "is_published": edit_is_published,
+                        "collection_id": collection_options.get(edit_collection),
                     },
                 )
                 if updated:
@@ -621,6 +669,16 @@ def render_stories_admin(client, collections) -> None:
                 else:
                     st.error("Não foi possível atualizar a história. Tente novamente.")
 
+        if delete_story_btn:
+            if not delete_confirm:
+                st.warning("Marque a caixa de confirmação antes de excluir.")
+            else:
+                if delete_story(client, selected_story.get("id")):
+                    st.success("História excluída com sucesso.")
+                    st.rerun()
+                else:
+                    st.error("Não foi possível excluir a história agora. Tente novamente.")
+
 
 def render_admin_mode() -> None:
     """Renderiza a interface de administração."""
@@ -637,6 +695,13 @@ def render_admin_mode() -> None:
     if not admin_login_gate():
         return
 
+    # Botão para encerrar sessão admin de forma clara
+    logout_col, _ = st.columns([1, 3])
+    with logout_col:
+        if st.button("Sair do painel admin"):
+            st.session_state["admin_authenticated"] = False
+            st.rerun()
+
     supabase_client = get_supabase_client()
     if supabase_client is None:
         st.warning(
@@ -650,6 +715,34 @@ def render_admin_mode() -> None:
     render_collections_admin(supabase_client)
     st.markdown("---")
     render_stories_admin(supabase_client, list_collections_for_admin(supabase_client))
+
+    st.markdown("---")
+    st.subheader("Histórico de leitura")
+
+    recent = get_recent_reads(supabase_client, limit=20)
+    if recent:
+        friendly_source = {"random": "História da noite", "manual": "Escolha manual"}
+        st.table(
+            [
+                {
+                    "Quando": str(item.get("created_at")),
+                    "Coleção": item.get("collection_name") or "—",
+                    "História": item.get("title") or "—",
+                    "Origem": friendly_source.get(item.get("source"), "Escolha manual"),
+                }
+                for item in recent
+            ]
+        )
+    else:
+        st.info("Nenhuma leitura registrada ainda.")
+
+    ranking = get_read_count_by_story(supabase_client)
+    if ranking:
+        st.markdown("### Histórias mais lidas")
+        for item in ranking:
+            st.write(f"{item.get('title')} – {item.get('read_count')} leitura(s)")
+    else:
+        st.info("O ranking aparecerá após as primeiras leituras.")
 
 
 def main() -> None:

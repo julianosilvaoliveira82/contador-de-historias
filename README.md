@@ -81,9 +81,35 @@ Passo a passo:
 Dicas de solução de problemas:
 - Se algo não aparecer no leitor, verifique se a coleção está ativa (`is_active = true`) e se a história está publicada (`is_published = true`).
 - Em caso de erro ao salvar, tente novamente mais tarde e confira a conexão com o Supabase.
-- Exclusões podem ser feitas no Table Editor do Supabase por enquanto; versões futuras podem incluir exclusão no painel com fluxos seguros.
+- Exclusões podem ser feitas pelo próprio painel admin com confirmação; os arquivos no Storage não são removidos automaticamente neste passo.
 
 Aviso de segurança doméstica: este CRUD é pensado para uso familiar. Para abrir ao público, será preciso revisar autenticação, segurança e trilhas de auditoria.
+
+### Mover histórias entre coleções
+- No painel admin, ao editar uma história, escolha a nova coleção no campo **Coleção desta história** e salve. A história passa a aparecer na nova coleção no modo leitor quando publicada.
+
+### Publicar, despublicar e excluir histórias
+- Uma história marcada como **História publicada** aparece no modo leitor.
+- Ao despublicar, ela some do leitor, mas continua disponível para edição no admin.
+- O botão **Excluir história** remove o registro do banco (ação irreversível). Os arquivos no Supabase Storage não são apagados automaticamente nesta etapa.
+
+### Login do painel admin
+- Depois de fazer login com `ADMIN_USERNAME` e `ADMIN_PASSWORD` (definidos nos secrets), o painel continua acessível enquanto a aba permanecer aberta.
+- Há um botão **Sair do painel admin** para encerrar a sessão e retornar à tela de login sempre que desejar.
+
+### Excluir histórias
+- No formulário de edição de histórias há uma caixa de confirmação e o botão **Excluir história**.
+- Marque a confirmação e clique em excluir para remover a história do banco. Esta ação é permanente e não apaga automaticamente arquivos do Storage.
+- A opção **História publicada** continua sendo o jeito simples de mostrar ou esconder a história do modo leitor sem removê-la.
+
+### Modo de leitura focado
+- Ao abrir uma história (por sorteio ou escolha manual), o app entra em um modo focado e mostra apenas a história escolhida.
+- Use o botão **Voltar para lista** para retornar às coleções e às demais histórias.
+- Esse modo foi pensado para o Benício ler sem distrações, deixando a tela limpa enquanto a história estiver aberta.
+
+### Histórico de leitura
+- Cada leitura registra: história, coleção, origem (`História da noite` ou `Escolha manual`) e horário. Nenhum dado pessoal é salvo.
+- No painel admin há duas visualizações: leituras recentes (últimas aberturas) e ranking das histórias mais lidas.
 
 ## Upload de imagens e áudios no painel admin
 O app usa o Supabase Storage para guardar a mídia das histórias.
