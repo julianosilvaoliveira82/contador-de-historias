@@ -55,7 +55,7 @@ Com o schema aplicado e os secrets configurados, você pode cadastrar dados pelo
 
 Dicas:
 - Se nada aparecer, confira se a coleção está com `is_active = true`, se as histórias estão com `is_published = true` e se os secrets estão configurados corretamente no Streamlit Cloud.
-- O app exibe o título, o texto da história e a imagem (quando `image_url` estiver preenchido). O player de áudio ainda não está disponível; apenas mostramos uma mensagem informando que chegará em breve.
+- O app exibe o título, o texto da história, a imagem (quando `image_url` estiver preenchido) e o player de áudio (quando `audio_url` está configurado).
 
 ## Usando o painel admin (CRUD de coleções e histórias)
 O painel admin permite criar e editar coleções e histórias diretamente nas tabelas `collections` e `stories` do Supabase.
@@ -73,6 +73,23 @@ Dicas de solução de problemas:
 - Exclusões podem ser feitas no Table Editor do Supabase por enquanto; versões futuras podem incluir exclusão no painel com fluxos seguros.
 
 Aviso de segurança doméstica: este CRUD é pensado para uso familiar. Para abrir ao público, será preciso revisar autenticação, segurança e trilhas de auditoria.
+
+## Upload de imagens e áudios no painel admin
+O app usa o Supabase Storage para guardar a mídia das histórias.
+
+- Buckets esperados: `story-images` (imagens) e `story-audio` (áudios). Se ainda não existirem, crie-os no painel do Supabase.
+
+Como usar:
+1. Acesse `?mode=admin` e faça login.
+2. Crie ou edite uma história na seção **Histórias**.
+3. (Opcional) Envie imagem e/ou áudio nos campos de upload do formulário.
+4. Salve; o app faz o upload para o bucket e grava as URLs na história.
+5. No modo leitor, a imagem aparecerá junto ao texto e o áudio poderá ser reproduzido.
+
+Pontos de atenção:
+- Arquivos grandes podem demorar a carregar em conexões lentas.
+- Buckets podem estar públicos; para uso doméstico isso costuma ser suficiente, mas para uso público revise as políticas de acesso.
+- Nunca exponha chaves ou URLs sensíveis neste README ou no código; continue usando Secrets no Streamlit Cloud.
 
 ## PIN do leitor e login do admin
 Proteções leves para organizar o acesso dentro da família:
@@ -103,8 +120,8 @@ Segurança:
 - Para abrir o app ao público no futuro, será necessário um sistema de autenticação mais robusto (fora do escopo deste passo).
 
 ## Próximos Passos (TODO)
-- Integrar storage de imagens/áudios no Supabase e adicionar autenticação mais robusta.
-- Incluir player de áudio para cada história.
+- Reforçar segurança e autenticação antes de abrir o app ao público.
+- Aprimorar a experiência de áudio (ex.: controles avançados, pré-carregamento).
 - Adicionar exclusão segura e trilhas de auditoria para coleções e histórias.
 
 > Foco na simplicidade e na família brasileira: mensagens em português, sem anúncios e sem distrações.

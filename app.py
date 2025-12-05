@@ -1,4 +1,5 @@
 import streamlit as st
+from pathlib import Path
 
 from stories_repository import (
     get_active_collections,
@@ -10,8 +11,28 @@ from stories_repository import (
     list_stories_for_collection_admin,
     create_story,
     update_story,
+    update_story_media,
 )
 from supabase_client import get_supabase_client
+
+
+def upload_media_file(client, bucket: str, path: str, file_obj):
+    """Envia um arquivo para o bucket indicado e retorna a URL pública ou None em falha."""
+
+    try:
+        data = file_obj.read()
+        storage = client.storage.from_(bucket)
+        storage.upload(path, data, {
+            "content-type": file_obj.type or "application/octet-stream",
+            "upsert": True,
+        })
+        public_url = storage.get_public_url(path)
+        if isinstance(public_url, dict):
+            return public_url.get("publicUrl") or public_url.get("public_url")
+        return public_url
+    except Exception as exc:  # pragma: no cover - feedback simples
+        print(f"[Supabase] Erro ao enviar arquivo para {bucket}/{path}: {exc}")
+        return None
 
 
 def get_mode_from_query_params() -> str:
@@ -104,6 +125,10 @@ def render_story_content(story: dict) -> None:
     image_url = story.get("image_url")
     if image_url:
         st.image(image_url, use_column_width=True)
+        button_key = f"view_image_{story.get('id', 'story')}"
+        if st.button("Ver imagem em tela cheia", key=button_key):
+            with st.modal("Imagem da história"):
+                st.image(image_url, use_column_width=True)
 
     body = story.get("body", "") or ""
     paragraphs = [p.strip() for p in body.split("\n\n") if p.strip()]
@@ -113,8 +138,12 @@ def render_story_content(story: dict) -> None:
     for paragraph in paragraphs:
         st.write(paragraph)
 
-    if story.get("audio_url"):
-        st.info("Áudio desta história estará disponível em breve.")
+    audio_url = story.get("audio_url")
+    if audio_url:
+        st.audio(audio_url)
+        st.caption("Ouvir esta história")
+    else:
+        st.info("Áudio desta história ainda não está disponível.")
 
 
 def render_reader_mode() -> None:
@@ -351,6 +380,18 @@ def render_stories_admin(client, collections) -> None:
         body = st.text_area("Texto", key="create_story_body")
         image_url = st.text_input("URL da imagem (opcional)", key="create_story_image")
         audio_url = st.text_input("URL do áudio (opcional)", key="create_story_audio")
+        image_file = st.file_uploader(
+            "Imagem da história (opcional)",
+            type=["png", "jpg", "jpeg", "webp"],
+            accept_multiple_files=False,
+            key="create_story_image_upload",
+        )
+        audio_file = st.file_uploader(
+            "Áudio da história (opcional)",
+            type=["mp3", "wav", "m4a", "ogg"],
+            accept_multiple_files=False,
+            key="create_story_audio_upload",
+        )
         sort_order = st.number_input("Ordem", value=0, step=1, key="create_story_sort")
         is_published = st.checkbox("História publicada", value=False, key="create_story_published")
         create_submit = st.form_submit_button("Criar história")
@@ -372,8 +413,36 @@ def render_stories_admin(client, collections) -> None:
                     },
                 )
                 if created:
-                    st.success("História criada com sucesso!")
-                    st.rerun()
+                    upload_errors = False
+                    story_id = created.get("id")
+
+                    if image_file and story_id:
+                        image_ext = Path(image_file.name).suffix or ".png"
+                        image_path = f"stories/{story_id}/cover{image_ext}"
+                        image_public_url = upload_media_file(
+                            client, "story-images", image_path, image_file
+                        )
+                        if image_public_url:
+                            update_story_media(client, story_id, image_url=image_public_url)
+                        else:
+                            upload_errors = True
+                            st.error("Não foi possível enviar a imagem. Tente novamente.")
+
+                    if audio_file and story_id:
+                        audio_ext = Path(audio_file.name).suffix or ".mp3"
+                        audio_path = f"stories/{story_id}/audio{audio_ext}"
+                        audio_public_url = upload_media_file(
+                            client, "story-audio", audio_path, audio_file
+                        )
+                        if audio_public_url:
+                            update_story_media(client, story_id, audio_url=audio_public_url)
+                        else:
+                            upload_errors = True
+                            st.error("Não foi possível enviar o áudio. Tente novamente.")
+
+                    if not upload_errors:
+                        st.success("História criada com sucesso!")
+                        st.rerun()
                 else:
                     st.error("Não foi possível criar a história. Tente novamente.")
 
@@ -411,6 +480,18 @@ def render_stories_admin(client, collections) -> None:
             value=selected_story.get("audio_url", "") or "",
             key="edit_story_audio",
         )
+        new_image_file = st.file_uploader(
+            "Imagem da história (opcional)",
+            type=["png", "jpg", "jpeg", "webp"],
+            accept_multiple_files=False,
+            key="edit_story_image_upload",
+        )
+        new_audio_file = st.file_uploader(
+            "Áudio da história (opcional)",
+            type=["mp3", "wav", "m4a", "ogg"],
+            accept_multiple_files=False,
+            key="edit_story_audio_upload",
+        )
         edit_sort_order = st.number_input(
             "Ordem",
             value=int(selected_story.get("sort_order") or 0),
@@ -441,8 +522,36 @@ def render_stories_admin(client, collections) -> None:
                     },
                 )
                 if updated:
-                    st.success("História atualizada com sucesso!")
-                    st.rerun()
+                    upload_errors = False
+                    story_id = selected_story.get("id")
+
+                    if new_image_file and story_id:
+                        image_ext = Path(new_image_file.name).suffix or ".png"
+                        image_path = f"stories/{story_id}/cover{image_ext}"
+                        image_public_url = upload_media_file(
+                            client, "story-images", image_path, new_image_file
+                        )
+                        if image_public_url:
+                            update_story_media(client, story_id, image_url=image_public_url)
+                        else:
+                            upload_errors = True
+                            st.error("Não foi possível enviar a nova imagem. Tente novamente.")
+
+                    if new_audio_file and story_id:
+                        audio_ext = Path(new_audio_file.name).suffix or ".mp3"
+                        audio_path = f"stories/{story_id}/audio{audio_ext}"
+                        audio_public_url = upload_media_file(
+                            client, "story-audio", audio_path, new_audio_file
+                        )
+                        if audio_public_url:
+                            update_story_media(client, story_id, audio_url=audio_public_url)
+                        else:
+                            upload_errors = True
+                            st.error("Não foi possível enviar o novo áudio. Tente novamente.")
+
+                    if not upload_errors:
+                        st.success("História atualizada com sucesso!")
+                        st.rerun()
                 else:
                     st.error("Não foi possível atualizar a história. Tente novamente.")
 

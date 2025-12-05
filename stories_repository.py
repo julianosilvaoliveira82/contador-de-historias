@@ -194,3 +194,33 @@ def update_story(client, story_id: str, data: Dict[str, Any]) -> Optional[Story]
     except Exception as exc:  # pragma: no cover
         print(f"[Supabase] Erro ao atualizar história: {exc}")
         return None
+
+
+def update_story_media(
+    client, story_id: str, image_url: Optional[str] = None, audio_url: Optional[str] = None
+) -> Optional[Story]:
+    """Atualiza campos de mídia de uma história específica, preservando os demais dados."""
+
+    payload: Dict[str, Any] = {}
+
+    if image_url is not None:
+        payload["image_url"] = image_url
+    if audio_url is not None:
+        payload["audio_url"] = audio_url
+
+    if not payload:
+        return None
+
+    try:
+        response = (
+            client.table("stories")
+            .update(payload)
+            .eq("id", story_id)
+            .execute()
+        )
+        if response.data:
+            return response.data[0]
+        return None
+    except Exception as exc:  # pragma: no cover
+        print(f"[Supabase] Erro ao atualizar mídia da história: {exc}")
+        return None
