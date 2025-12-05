@@ -119,21 +119,14 @@ from typing import Optional, Dict, Any
 
 Collection = Dict[str, Any]  # se esse alias já existir, não duplique
 
-def create_collection(
-    client,
-    name: str,
-    description: str,
-    sort_order: int,
-    is_active: bool,
-) -> Optional[Collection]:
+def create_collection(client, data: Dict[str, Any]) -> Optional[Collection]:
     """Cria uma nova coleção no Supabase."""
 
-    # Monta o payload com os nomes de coluna corretos
     payload = {
-        "name": name,
-        "description": description or "",
-        "sort_order": sort_order,
-        "is_active": is_active,
+        "name": (data.get("name") or "").strip(),
+        "description": (data.get("description") or "").strip(),
+        "sort_order": int(data.get("sort_order") or 0),
+        "is_active": bool(data.get("is_active", True)),
     }
 
     try:
@@ -144,6 +137,7 @@ def create_collection(
     except Exception as exc:  # pragma: no cover
         print(f"[Supabase] Erro ao criar coleção: {exc}")
         return None
+
 
 
 
